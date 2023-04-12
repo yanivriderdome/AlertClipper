@@ -4,6 +4,10 @@ import os
 from moviepy.video.compositing.concatenate import concatenate_videoclips
 import math
 
+filename = r"J:\BackAlerts.csv"
+video_path = r"J:\Videos"
+free_text = "Motherson"
+
 vehicles = {-1: "Unknown", 0: "Car", 1: "Bus", 2: "Truck", 3: "Bike"}
 names_dict = {"Right BlindSpot": {3: "Bike_Blind_Spot_Right_", 0: "Right_Blind_Spot_"},
               "Left BlindSpot": {3: "Bike_Blind_Spot_Left_", 0: "Left_Blind_Spot_"},
@@ -25,7 +29,7 @@ def get_output_filename(alert_types, classes, ids, filename, alert_label, free_t
         alert_type = alert_types[0]
     classes_unique = list(set(classes))
     ids = list(set(ids))
-    if len(classes_unique) == 0:
+    if len(classes_unique) == 1:
         out_filename = names_dict[alert_type][classes_unique[0]]
     else:
         out_filename = names_dict[alert_type][0]
@@ -66,9 +70,6 @@ def get_output_filename(alert_types, classes, ids, filename, alert_label, free_t
     print("saving", out_filename)
     return os.path.join(Out_folder, out_filename)
 
-
-filename = "BackAlerts.csv"
-video_path = r"D:\Videos2"
 
 dump_df = pd.read_csv(filename.replace("Alerts", "Data"))
 alerts_df = pd.read_csv(filename)
@@ -127,13 +128,16 @@ for line in data:
         (alerts_df['Black Box Filename'] == line["file1"]) & (alerts_df['Id'] == line["ids"][-1])].index.max()
     if math.isnan(df_ind2):
         df_ind2 = alerts_df.loc[(alerts_df['Black Box Filename'] == line["file1"])].index.max()
-    scores = alerts_df["ClassifierResult"][df_ind1:df_ind2]
+    try:
+        scores = alerts_df["ClassifierResult"][df_ind1:df_ind2]
+    except:
+        scores = []
     scores2 = [df_scores[id] for id in line["ids"]]
     alert_label = True
     if (len(scores) > 0 and max(scores) < 0.7) or (len(scores2) > 0 and max(scores2) < 0.7):
         alert_label = False
     out_filename = get_output_filename(line["Alert Types"], line["Classes"], line["ids"], line["file0"], alert_label,
-                                       "Jakarta")
+                                       free_text)
 
     if line["file0"] == line["file1"]:
         end_frame1 = line["ind1"]
