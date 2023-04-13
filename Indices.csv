@@ -1,2 +1,2 @@
-Left BlindSpot,Right BlindSpot,Left BlindSpot Bike,Right BlindSpot Bike,Both BlindSpots,Both BlindSpots Bike,Front+AF8-Collision,Front+AF8-Distance,Front+AF8-Collision+AF8-Truck,Front+AF8-Distance+AF8-Truck,Front+AF8-Collision+AF8-Bike,Front+AF8-Distance+AF8-Bike,Front+AF8-Collision+AF8-Bus,Front+AF8-Distance+AF8-Bus
-301,508,146,268,48,11,1,1,1,1,1,1,1,1
+,Left BlindSpot,Right BlindSpot,Left BlindSpot Bike,Right BlindSpot Bike,Both BlindSpots,Both BlindSpots Bike,Front+AF8-Collision,Front+AF8-Distance,Front+AF8-Collision+AF8-Truck,Front+AF8-Distance+AF8-Truck,Front+AF8-Collision+AF8-Bike,Front+AF8-Distance+AF8-Bike,Front+AF8-Collision+AF8-Bus,Front+AF8-Distance+AF8-Bus,Front+AF8-Collision+AF8-Traffic,Front+AF8-Distance+AF8-Traffic
+0,308,543,150,287,72,14,88,134,11,14,6,37,6,6,11,13
