@@ -58,6 +58,7 @@ def FrontAlertsClipper(indices_filename, filename, indices_df, Out_folder, free_
     ids = alerts_df["Id"].unique()
 
     data = []
+    data_log = []
     prev_data = {"file0": "_",
                  "ind0": 0,
                  "file1": "_",
@@ -166,4 +167,10 @@ def FrontAlertsClipper(indices_filename, filename, indices_df, Out_folder, free_
 
             # write the final video to a new file
             final_video.write_videofile(out_filename, fps=30)
+        data_log.append({"Filename": out_filename,"Type": line["Alert Types"][0],
+                        "Start Frame":line["ind0"],"Start File": line["file0"],
+                        "End Frame":line["ind1"],"End File": line["file0"]})
+
     indices_df.to_csv(indices_filename.replace(".csv", "_new.csv"))
+    out_df = pd.json_normalize(data_log)
+    out_df.to_csv("LogBack.csv")
