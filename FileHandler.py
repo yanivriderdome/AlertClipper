@@ -50,5 +50,6 @@ def get_file_indices(front_path, back_path, Out_folder):
             filenames = filenames_front
         filenames = [filename for filename in filenames if filename.startswith(name_type)]
         numbers = [filename[len(name_type) + 1:].lstrip().split("_")[0] for filename in filenames]
-        indices[name_type] = max([int(number) for number in numbers if number.isdigit()])
+        if len(numbers) > 0:
+            indices[name_type] = 1 + max([int(number) for number in numbers if number.isdigit()])
     return indices
