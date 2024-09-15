@@ -5,10 +5,38 @@ from moviepy.video.compositing.concatenate import concatenate_videoclips
 import numpy as np
 from BlindSpotClipper import get_alert_label, file_is_unique, vehicles, is_night
 import shutil
+import cv2
+
+
+def extract_frames(input_video, start_frame, end_frame, output_video):
+    cap = cv2.VideoCapture(input_video)
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    if end_frame == -1:
+        end_frame = float('inf')
+    frame_count = start_frame
+    while cap.isOpened() and frame_count <= end_frame:
+        ret, frame = cap.read()
+        if ret:
+            out.write(frame)
+        else:
+            break
+        frame_count += 1
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
 
 inds_falses = {}
 min_video_length = 250
-ScoreThreshold = 0.5
+ScoreThreshold = 0.3
 ScoreThresholdTrue = 0.7
 
 def get_output_filename(alert_types, classes, ids, scores, NCars, filename, alert_label, free_text, Out_folder, indices):
@@ -17,15 +45,18 @@ def get_output_filename(alert_types, classes, ids, scores, NCars, filename, aler
         ids = [_id for _score, _id in zip(scores, ids) if _score > ScoreThresholdTrue]
     alert_types = list(set(alert_types))
     alert_type = alert_types[0]
+    if "Front_Collision_Front" in filename:
+        alert_type = 'Front_Collision_Front'
+    if "Front_Collision_Side" in filename:
+        alert_type = 'Front_Collision_Side'
 
     if len(alert_types) == 1:
         alert_type = alert_types[0]
     alert_type = alert_type.replace("Safe", "Front")
-
+    alert_type = alert_type.replace('FrontCollision', 'Front_Collision')
     if len(classes) > 0 and np.unique(classes)[0] == 3:
         alert_type = alert_type + "_Bike"
     out_filename = alert_type.replace("Safe", "Front")
-
 
     if alert_label:
         out_filename = out_filename + "_{:04d}".format(indices[alert_type])
@@ -56,6 +87,8 @@ def get_output_filename(alert_types, classes, ids, scores, NCars, filename, aler
     out_filename = out_filename.replace("__", "_")
     out_filename = out_filename.replace("Front_Distance_False_", "Front_False_")
     out_filename = out_filename.replace("Front_Collision_False_", "Front_False_")
+    out_filename = out_filename.replace("CollisionFalse_", "Front_False_")
+
     print("saving", out_filename)
     return os.path.join(Out_folder, out_filename), indices
 
@@ -80,11 +113,21 @@ def correct_data(data):
 
 def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
     # dump_df = pd.read_csv(filename.replace("Alerts", "Data"))
+
     if not os.path.exists(filename):
         print("No Front Alerts Filename")
         return
     alerts_df = pd.read_csv(filename)
-    alerts_df = alerts_df[alerts_df["ClassifierResult"] > ScoreThreshold]
+
+    ScoreColumnName = 'ClassifierScore'
+    # if "distance" in filename.lower():
+    #     ScoreColumnName = 'SafeDistanceScore'
+    #     if 'SafeDistanceScore' not in alerts_df.columns:
+    #         ScoreColumnName = 'ClassifierScore'
+    for col in alerts_df.columns:
+        if "Unnamed:" in col:
+            del(alerts_df[col])
+    alerts_df = alerts_df[alerts_df[ScoreColumnName].astype(float) > ScoreThreshold]
 
     ids = alerts_df["Id"].unique()
 
@@ -94,22 +137,23 @@ def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
                  "ind0": 0,
                  "file1": "_",
                  "ind1": 0}
-    df_scores = alerts_df.groupby("Id")["ClassifierResult"].max()
+    df_scores = alerts_df.groupby("Id")[ScoreColumnName].max()
 
     for value in ids:
         min_index = alerts_df.loc[alerts_df['Id'] == value].index.min()
         max_index = alerts_df.loc[alerts_df['Id'] == value].index.max()
         id = alerts_df["Id"][max_index]
-        score = alerts_df[alerts_df["Id"] == id]["ClassifierResult"].max()
+        score = alerts_df[alerts_df["Id"] == id][ScoreColumnName].max()
         new_data = {"file0": alerts_df["FirstAppearedFile"][min_index],
+                    "file0Orig": alerts_df["FirstAppearedFile"][min_index],
                     "ind0": alerts_df["FirstAppearedFrameNumber"][min_index],
                     "file1": alerts_df["Black Box Filename"][max_index],
                     "ind1": alerts_df["Black Box Frame Number"][max_index],
                     "ids": [id],
                     "Classes": [alerts_df["Class"][max_index]],
                     "Alert Types": [alerts_df["Alert Type"][max_index]],
-                    "NCarsLeft":  [alerts_df["NCarsLeft"][max_index]],
-                    "NCarsRight": [alerts_df["NCarsRight"][max_index]],
+                    "NCarsLeft":  [alerts_df["TrafficStatistics.NCarsLeft"][max_index]],
+                    "NCarsRight": [alerts_df["TrafficStatistics.NCarsRight"][max_index]],
                     "scores": [score]}
         if "blind" in new_data["Alert Types"][0].lower():
             if alerts_df["AbsAngle"][max_index] < 50:
@@ -122,7 +166,7 @@ def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
         if len(data) > 1:
             prev_data = data[-1]
 
-        new_data["alert_label"] = get_alert_label(alerts_df, new_data, df_scores)
+        new_data["alert_label"] = get_alert_label(alerts_df, new_data, df_scores, ScoreColumnName)
 
         if prev_data["file1"] == new_data["file0"] and new_data["ind0"] - prev_data["ind1"] < 30:
             data[-1]["file1"] = new_data["file1"]
@@ -143,13 +187,17 @@ def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
             line['ind0'] = min(line['ind0'],data[i-1]['ind0'])
             inds_to_skip.append(i-1)
     for line in data:
-        input_filename1 = os.path.join(video_path, line["file0"])
+        try:
+            input_filename1 = os.path.join(video_path, line["file0"])
+        except:
+            input_filename1 = os.path.join(video_path, line["file1"])
+
         if not os.path.exists(input_filename1):
             print(input_filename1, " not found!")
             continue
         start_frame1 = line["ind0"]
         video1 = VideoFileClip(input_filename1)
-        alert_label = get_alert_label(alerts_df, line, df_scores)
+        alert_label = get_alert_label(alerts_df, line, df_scores, ScoreColumnName)
         out_filename, indices = get_output_filename(line["Alert Types"], line["Classes"], line["ids"],
                                                     line["scores"], line["NCarsLeft"] + line["NCarsRight"],
                                                     line["file0"], alert_label,
@@ -161,7 +209,6 @@ def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
 
         try:
             if line["file0"] == line["file1"]:
-
                 end_frame1 = line["ind1"]
                 start_time = start_frame1 / video1.fps
                 end_time = end_frame1 / video1.fps
@@ -187,14 +234,12 @@ def FrontAlertsClipper(filename, indices, Out_folder, free_text, video_path):
                 start_time2 = 0
                 end_time2 = line["ind1"] / video2.fps
 
-                # cut the videos between the start and end times
                 cut_video1 = video1.subclip(start_time1, end_time1)
                 cut_video2 = video2.subclip(start_time2, end_time2)
 
-                # concatenate the cut videos into one video
                 final_video = concatenate_videoclips([cut_video1, cut_video2])
 
-                # write the final video to a new file
+                out_filename = out_filename.replace("Front_Collision_Bike_False_", "Front_False_Bike")
                 final_video.write_videofile(out_filename, fps=30)
                 final_video.close()
 

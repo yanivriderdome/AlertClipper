@@ -1,39 +1,34 @@
 import os
-
+import re
 from BlindSpotClipper import BlindSpotClipper
 from FrontAlertsClipper import FrontAlertsClipper
-from FileHandler import get_file_indices
+from FileHandler import get_file_indices, delete_previous_csv_files, run_jetson_app
 import shutil
-import time
-import paramiko
 
-Folder = "Box 14"
+Folder = "Yoav"
+free_text = "Israel"
 
-Video_folder = os.path.join(r"I:\Videos\New_Rides", Folder)
-Video_folder_Out = os.path.join(r"I:\Videos\New_Rides\2023_Done", Folder)
-
-free_text = "Singapore"
-
-
-alerts_filename_rear = r"J:\BackAlerts.csv"
-alerts_filename_front = r"J:\FrontAlerts.csv"
-video_path = r"J:\Videos"
-Out_folder = r"J:\New_Alerts"
-
-
-max_files = 200
 copy_files = False
 Run_Jetson_App = False
 
+Video_folder = os.path.join(r"I:\Videos\New_Rides", Folder)
+Video_folder_Out = os.path.join(r"I:\Videos\New_Rides\2024_Done", Folder)
+
+BlindSpots_filename = r"J:\BlindSpots.csv"
+Front_Collision_filename = r"J:\FrontCollision.csv"
+Safe_Distance_filename = r"J:\SafeDistance.csv"
+
+video_path = r"J:\Videos"
+Out_folder = r"I:\Videos\New_Alerts"
+max_files = 300
 
 n_files = 0
 if copy_files:
     destination_dir = r"J:\Videos"
-    if not os.path.exists(destination_dir):
+    if os.path.exists(destination_dir):
+        [os.remove(os.path.join(destination_dir, file)) for file in os.listdir(destination_dir)]
+    else:
         os.mkdir(destination_dir)
-    for file in os.listdir(destination_dir):
-        if 'mp4' in file:
-            os.remove(os.path.join(destination_dir, file))
 
     for item in os.listdir(Video_folder):
         folder = os.path.join(Video_folder, item)
@@ -66,59 +61,26 @@ if copy_files:
             filename = os.path.basename(src_file)
             print(f"{filename}")
 
-        if not os.path.exists(Video_folder_Out):
-            os.makedirs(Video_folder_Out)
-
         shutil.move(folder, Video_folder_Out)
 
         if n_files > max_files:
             print(f"stopping after max: {n_files} files")
             break
 
-    print("finished copying")
+        print("finished copying")
 
-if n_files > 0 or not copy_files:
-    if Run_Jetson_App:
-        if os.path.exists(r"J:\BackAlerts.csv"):
-            os.remove(r"J:\BackAlerts.csv")
-        if os.path.exists(r"J:\FrontAlerts.csv"):
-            os.remove(r"J:\FrontAlerts.csv")
+indices = get_file_indices('/media/rider/4689-5BB2/Front_Alerts/', '/media/rider/6575-F30A2/Blindspot_All/',
+                           Out_folder)
+if Run_Jetson_App:
+    delete_previous_csv_files()
+    run_jetson_app('cd ~/riderdome && ./rider_jetson -batch_back \"/home/rider/riderdome/Videos/*rear*.mp4\" -LogAlertFeatures 1')
+BlindSpotClipper(BlindSpots_filename, indices, os.path.join(Out_folder, "New"), free_text, video_path)
+#
+# Front
+if Run_Jetson_App:
+    run_jetson_app('cd ~/riderdome && ./rider_jetson -batch_front \"/home/rider/riderdome/Videos/*front*.mp4\" -LogAlertFeatures 1')
 
-        hostname = '192.168.0.100'
-        username = 'rider'
-        password = 'Rider2021'
+FrontAlertsClipper(Front_Collision_filename, indices, os.path.join(Out_folder, "New"), free_text, video_path)
+FrontAlertsClipper(Safe_Distance_filename, indices, os.path.join(Out_folder, "New"), free_text, video_path)
 
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(hostname, username=username, password=password)
-
-    # Back
-        stdin, stdout, stderr = ssh.exec_command('cd ~/riderdome && ./rider_jetson -batch_back \"/home/rider/riderdome/Videos/*rear*.mp4\"')
-
-        while not stdout.channel.exit_status_ready():
-            str = stdout.read(64)
-            print(str.decode('utf-8'), end='')
-            time.sleep(0.1)
-
-    indices = get_file_indices('/media/rider/4689-5BB2/Front_Alerts/', '/media/rider/6575-F30A2/Blindspot_All/',
-                               Out_folder)
-    #
-    BlindSpotClipper(alerts_filename_rear, indices, os.path.join(Out_folder, "Back"), free_text,
-                     video_path)
-
-    # Front
-    if Run_Jetson_App:
-        stdin, stdout, stderr = ssh.exec_command('cd ~/riderdome && ./rider_jetson -batch_front \"/home/rider/riderdome/Videos/*front*.mp4\"')
-
-        while not stdout.channel.exit_status_ready():
-            str = stdout.read(64)
-            print(str.decode('utf-8'), end='')
-            time.sleep(0.1)
-
-        ssh.close()
-
-    # FrontAlertsClipper(alerts_filename_front, indices, os.path.join(Out_folder, "Front"), free_text, video_path)
-
-    print("all done")
-else:
-    print("folder is empty")
+print("all done")

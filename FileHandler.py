@@ -1,5 +1,5 @@
 import os
-
+import time
 import paramiko
 
 
@@ -24,19 +24,20 @@ def get_file_indices(front_path, back_path, Out_folder):
     filenames_back = stdout.read()
     filenames_back = filenames_back.decode('utf-8')
     filenames_back = filenames_back.split("\n")
-    filenames_back = [filename for filename in filenames_back if "False" not in filename and "Spot_Marginal" not in filename]
+    filenames_back = [filename for filename in filenames_back if
+                      "False" not in filename and "Spot_Marginal" not in filename]
 
     for root, dirs, files in os.walk(Out_folder):
         for directory in dirs:
             new_files = os.listdir(os.path.join(Out_folder, directory))
             filenames_front = filenames_front + [str(filename) for filename in new_files
-                                                 if "false" not in str(filename).lower() and
-                                                 "front" in str(filename).lower()]
+                                                 if "false" not in str(filename).lower() and 'front' in str(filename).lower()]
             filenames_back = filenames_back + [str(filename) for filename in new_files
-                                                if "false" not in str(filename).lower() and
-                                                "blind" in str(filename).lower()]
+                                               if "false" not in str(filename).lower() and
+                                               "blind" in str(filename).lower()]
     indices = {'Left_Blind_Spot': 0, 'Right_Blind_Spot': 0, 'Bike_Left_Blind_Spot': 0, 'Bike_Right_Blind_Spot': 0,
                'Left_And_Right_Blind_Spot': 0, 'Bike_Left_And_Right_Blind_Spot': 0, 'Front_Collision': 0,
+               'Front_Collision_Side': 0, 'Front_Collision_Front': 0,
                'Front_Distance': 0, 'Front_Collision_Truck': 0,
                'Front_Distance_Truck': 0, 'Front_Collision_Bike': 0,
                'Front_Distance_Bike': 0, 'Front_Collision_Bus': 0,
@@ -53,3 +54,28 @@ def get_file_indices(front_path, back_path, Out_folder):
         if len(numbers) > 0:
             indices[name_type] = 1 + max([int(number) for number in numbers if number.isdigit()])
     return indices
+
+
+def delete_previous_csv_files():
+    if os.path.exists(r"J:\BlindSpots.csv"):
+        os.remove(r"J:\BlindSpots.csv")
+    if os.path.exists(r"J:\FrontCollision.csv"):
+        os.remove(r"J:\FrontCollision.csv")
+    if os.path.exists(r"J:\SafeDistance.csv"):
+        os.remove(r"J:\SafeDistance.csv")
+
+def run_jetson_app(command):
+    hostname = '192.168.0.100'
+    username = 'rider'
+    password = 'Rider2021'
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname, username=username, password=password)
+    # Back
+    stdin, stdout, stderr = ssh.exec_command(command)
+
+    while not stdout.channel.exit_status_ready():
+        str_name = stdout.read(64)
+        print(str_name.decode('utf-8'), end='')
+        time.sleep(0.1)
